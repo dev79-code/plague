@@ -86,6 +86,7 @@ export function buildSnapshot(db, cfg) {
   const prizeSol = (kv.get('prize_lamports', 0) || 0) / 1e9;
   const pot = Math.max(0, prizeSol - cfg.prizeReserveSol);
   const curedBurn = ep.cure.reduce((s, r) => s + r.burned, 0);
+  const fees = db.prepare(`SELECT COALESCE(SUM(quote),0) AS total, MAX(t) AS last FROM fee_claims WHERE quote_symbol='SOL'`).get();
 
   return {
     v: 1,
@@ -109,6 +110,8 @@ export function buildSnapshot(db, cfg) {
       split: cfg.split,
       cureWallets: ep.cure.length,
       cureBurned: Math.round(curedBurn),
+      feesClaimedSol: Math.round(fees.total * 1000) / 1000,
+      lastFeeClaim: fees.last,
     },
     leaders: ep.leaders,
     deepest: ep.deepest,

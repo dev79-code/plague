@@ -10,6 +10,8 @@ const req = (k) => {
 
 export const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 export const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PE9ZpLHP7S4EFp';
+export const DBC_POOL_AUTHORITY = 'FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM';
+export const DAMM_V2_POOL_AUTHORITY = 'HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC';
 
 export const cfg = {
   port: num('PORT', 8080),
@@ -17,12 +19,20 @@ export const cfg = {
   mint: req('MINT'),
   devWallet: req('DEV_WALLET'),
   // Owners of the pool token vaults (bonding curve + DAMM v2 after graduation). Tokens leaving these = a buy.
-  poolOwners: list('POOL_OWNERS'),
+  // Defaults cover every Meteora bonding-curve (DBC) and DAMM v2 pool: their vaults are owned by these
+  // program-wide authorities. Only $PLAGUE balances are read, so other tokens' pools don't matter.
+  poolOwners: list('POOL_OWNERS').length ? list('POOL_OWNERS') : [DBC_POOL_AUTHORITY, DAMM_V2_POOL_AUTHORITY],
   // Extra addresses whose transaction history is polled (e.g. the pool addresses). The mint is always polled.
   extraWatch: list('EXTRA_WATCH'),
   tokenProgram: (process.env.TOKEN_PROGRAM || 'spl') === 'token2022' ? TOKEN_2022_PROGRAM : TOKEN_PROGRAM,
   prizeWallet: process.env.PRIZE_WALLET || '',
   prizeReserveSol: num('PRIZE_RESERVE_SOL', 0.05),
+
+  // Fee claiming: the key that is the pool creator / LP position owner. Claims go to PRIZE_WALLET.
+  feeClaimKeypair: process.env.FEE_CLAIM_KEYPAIR || process.env.PRIZE_KEYPAIR || './secrets/prize-keypair.json',
+  feeClaimHours: num('FEE_CLAIM_HOURS', 0),      // 0 = off; e.g. 6 = claim every 6 hours
+  minClaimQuote: num('MIN_CLAIM_QUOTE', 0.02),   // skip claims smaller than this (in SOL, or the pool's quote token)
+  priorityMicroLamports: num('PRIORITY_MICROLAMPORTS', 50000),
 
   minInfect: num('MIN_INFECT', 1000),        // tokens a wallet must receive to be infected
   minActiveHold: num('MIN_ACTIVE_HOLD', 1000), // descendants must still hold this much to count for score

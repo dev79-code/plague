@@ -10,6 +10,7 @@ import { makeApplier } from './infect.js';
 import { makePoller } from './poller.js';
 import { makeChainJobs } from './chain.js';
 import { buildSnapshot, walletInfo } from './graph.js';
+import { makeFeeJob } from './feejob.js';
 
 const db = openDb(cfg);
 const apply = makeApplier(db, cfg);
@@ -64,6 +65,10 @@ app.get('/api/wallet/:address', (req, res) => {
   res.json(walletInfo(db, cfg, a));
 });
 
+app.get('/api/fees', (_req, res) => {
+  res.json(db.prepare('SELECT t, source, pool, quote, quote_symbol, base, sig FROM fee_claims ORDER BY id DESC LIMIT 200').all());
+});
+
 app.get('/api/payouts', (_req, res) => {
   res.json(db.prepare('SELECT epoch, category, address, lamports, sig, status, created_at FROM payouts ORDER BY id DESC LIMIT 200').all());
 });
@@ -93,6 +98,11 @@ if (cfg.worker) {
   every(jobs.refreshStats, cfg.statsMs, 1000);
   every(jobs.reconcileBalances, cfg.reconcileMs, 20_000);
   every(jobs.resolveNames, 60_000, 30_000);
+  if (cfg.feeClaimHours > 0) {
+    const feeJob = makeFeeJob({ db, cfg, onChange: markDirty });
+    every(feeJob, cfg.feeClaimHours * 3600_000, 60_000);
+    console.log(`[fees] auto-claim every ${cfg.feeClaimHours}h into ${cfg.prizeWallet}`);
+  }
 }
 
 process.on('SIGTERM', () => { db.close(); process.exit(0); });

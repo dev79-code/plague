@@ -30,19 +30,28 @@ Open `frontend/index.html?api=http://localhost:8080` in your browser.
 ## 2. Launch the token on Meteora
 
 1. Launch $PLAGUE from your **dev wallet** (this is patient zero). Note the **mint address**.
-2. Create a separate **prize wallet** (e.g. `solana-keygen new -o prize-keypair.json`). Set it as the creator fee
-   receiver if your launch flow allows it; otherwise claim creator fees in Meteora and send them to the prize wallet.
+2. Create a separate **prize wallet**: `solana-keygen new -o prize-keypair.json`. Its address is `PRIZE_WALLET`.
 3. Get a Helius API key (helius.dev). Free tier is fine for testing; use a paid plan at launch because every
    transaction is fetched.
 
-## 3. Find the pool owner address(es)
+## 3. Hand the creator fees to the prize wallet
 
-A "buy" means tokens left a pool vault, so the backend needs the **owner** of the pool's token vault.
+The server claims your Meteora creator fees and sends them to the prize wallet. Claiming must be signed by the
+pool's creator, and you don't want your dev wallet key on a server. So, once, on **your own computer**, move the
+creator role to the prize wallet:
 
-1. Open your mint on Solscan → **Holders**. The top holder after launch is the pool vault.
-2. Click it and copy its **Owner** (the pool authority). Put it in `POOL_OWNERS`.
-3. If the token starts on a bonding curve (DBC) and later graduates to DAMM v2, do this again after graduation and
-   add the second owner: `POOL_OWNERS=ownerA,ownerB`, then restart.
+```bash
+cd backend && npm install
+cp .env.example .env    # set RPC_URL, MINT, DEV_WALLET, PRIZE_WALLET
+DEV_KEYPAIR=~/path/to/dev-keypair.json node scripts/transfer-creator.js            # preview
+DEV_KEYPAIR=~/path/to/dev-keypair.json node scripts/transfer-creator.js --execute  # do it
+```
+
+This works while the token is on the bonding curve. If it has already graduated to DAMM v2, send the LP position
+NFT from your dev wallet to the prize wallet in your wallet app instead (it shows up as an NFT).
+
+Pool detection needs no setup: every Meteora bonding-curve and DAMM v2 vault is owned by one of two fixed
+addresses, which are the default for `POOL_OWNERS`.
 
 ## 4. Backend on a droplet
 
@@ -54,7 +63,8 @@ A "buy" means tokens left a pool vault, so the backend needs the **owner** of th
 ```bash
 cd /opt/plague
 bash deploy/setup-droplet.sh        # installs Docker, opens ports 22/80/443
-cp .env.example .env && nano .env   # fill in RPC_URL, MINT, DEV_WALLET, POOL_OWNERS, PRIZE_WALLET, API_DOMAIN, CORS_ORIGINS
+cp .env.example .env && nano .env   # fill in RPC_URL, MINT, DEV_WALLET, PRIZE_WALLET, API_DOMAIN, CORS_ORIGINS
+mkdir -p secrets && nano secrets/prize-keypair.json   # paste the prize keypair (needed for fee claims and payouts)
 docker compose up -d --build
 docker compose logs -f api          # watch it backfill
 curl https://api.yourdomain.com/api/health
@@ -66,7 +76,7 @@ transaction anyway.
 Useful commands:
 
 ```bash
-docker compose restart api                         # after editing .env
+docker compose up -d                                # after editing .env (restart does not reload it)
 docker compose up -d --build                       # after updating code
 sqlite3 data/plague.db ".backup data/backup.db"    # back up (add to a daily cron)
 ```
@@ -91,7 +101,24 @@ Helius dashboard:
 
 The poller and webhook can run together. Each transaction is only counted once.
 
-## 7. Paying prizes
+## 7. Fee claiming
+
+With `FEE_CLAIM_HOURS=6` the server claims every 6 hours: bonding-curve creator fees while the token is on the curve,
+and DAMM v2 LP position fees after graduation. Everything goes to the prize wallet, and claims smaller than
+`MIN_CLAIM_QUOTE` SOL are skipped so network fees don't eat them. Set `FEE_CLAIM_HOURS=0` to turn it off.
+
+By hand:
+
+```bash
+docker compose exec api node scripts/claim-fees.js            # shows what's claimable
+docker compose exec api node scripts/claim-fees.js --execute  # claims it
+```
+
+Claims are listed at `/api/fees`, and the map shows the total claimed. If the claim key isn't the pool creator,
+the log says so and nothing is sent. Any $PLAGUE fees also land in the prize wallet; the prize wallet is never
+counted as infected.
+
+## 8. Paying prizes
 
 After an epoch ends:
 
@@ -112,7 +139,7 @@ before you run `--execute`.
 
 | Rule | Where | Setting |
 |---|---|---|
-| Tokens leaving a pool vault infect the receiver (parent = pool) | `src/infect.js` | `POOL_OWNERS` |
+| Tokens leaving any Meteora bonding-curve or DAMM v2 vault infect the receiver (parent = pool) | `src/infect.js` | `POOL_OWNERS` (optional) |
 | Receiving ≥ MIN_INFECT from an infected wallet infects you (parent = sender) | `src/infect.js` | `MIN_INFECT` |
 | First infection is permanent; vaccinated and uninfected holders don't spread | `src/infect.js` | — |
 | Burning VAX_BURN in total vaccinates you | `src/infect.js` | `VAX_BURN` |
@@ -130,6 +157,7 @@ all receivers are infected by it. Every 10 minutes, balances are corrected from 
 | `GET /api/graph` | Full snapshot: nodes, stats, leaders, feed, prize, epidemic curve |
 | `GET /api/wallet/:address` | Status of any wallet (infected / vaccinated / holder / clean) |
 | `GET /api/payouts` | Payout history |
+| `GET /api/fees` | Fee claim history |
 | `GET /api/health` | Health check |
 | `POST /webhook/helius` | Helius raw webhook receiver |
 

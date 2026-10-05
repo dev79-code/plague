@@ -4,6 +4,7 @@
 //  - Tokens leaving a pool vault owner  -> receiver is infected by the pool (a "buy").
 //  - Tokens leaving an infected wallet  -> receiver is infected by that wallet,
 //    as long as it receives at least MIN_INFECT and has never been infected.
+//  - The prize wallet never gets infected (it receives claimed fees from the pool).
 //  - Vaccinated wallets (and wallets that were never infected) do not spread.
 //  - Net supply going down = a burn. Once a wallet has burned VAX_BURN in total,
 //    it is vaccinated: its score freezes and it stops spreading.
@@ -64,7 +65,7 @@ export function makeApplier(db, cfg) {
       }
       if (parent) {
         for (const r of receivers) {
-          if (pool.has(r.owner) || r.owner === src || r.owner === cfg.devWallet || r.delta < cfg.minInfect) continue;
+          if (pool.has(r.owner) || r.owner === src || r.owner === cfg.devWallet || r.owner === cfg.prizeWallet || r.delta < cfg.minInfect) continue;
           const res = q.infect.run(parent, gen, via, t, p.sig, r.owner);
           if (res.changes) {
             q.ev.run(p.sig, p.slot, t, via, parent, r.owner, r.delta);

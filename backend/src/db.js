@@ -41,6 +41,11 @@ CREATE TABLE IF NOT EXISTS payouts (
   sig TEXT, status TEXT, created_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS payouts_epoch ON payouts(epoch);
+
+CREATE TABLE IF NOT EXISTS fee_claims (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  t INTEGER, source TEXT, pool TEXT, quote REAL, quote_symbol TEXT, base REAL, sig TEXT
+);
 `;
 
 export function openDb(cfg) {

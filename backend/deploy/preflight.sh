@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Preflight check for the $PLAGUE backend. Run on the droplet from the backend folder:
 #   bash deploy/preflight.sh
+#   bash deploy/preflight.sh --postlaunch   (after launch: stricter, plus live-traffic checks)
 # Prints PASS / WARN / FAIL for each check. Changes nothing.
 set -u
+POST=0; [ "${1:-}" = "--postlaunch" ] && POST=1
 cd "$(dirname "$0")/.." || exit 1
 
 G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; B=$'\e[1m'; N=$'\e[0m'
@@ -71,7 +73,7 @@ if [[ "$H" == *'"ok":true'* ]]; then
   [[ "$H" == *'"worker":true'* ]] && pass "Indexer running (live mode)" || fail "Indexer is off: still in demo mode"
   [[ -n "${MINT:-}" && "$H" == *"$MINT"* ]] && pass "Server is watching your MINT" || fail "Server is watching a different mint: $H"
 else fail "No answer on 127.0.0.1:8080 ($H)"; fi
-G1=$(curl -s -m 8 http://127.0.0.1:8080/api/graph | head -c 400 || true)
+G1=$(curl -s -m 8 http://127.0.0.1:8080/api/graph || true)
 [[ "$G1" == *'"nodes"'* ]] && pass "Graph endpoint returns data" || fail "Graph endpoint not returning data"
 
 section "6. Solana RPC"
@@ -81,7 +83,15 @@ if [ -n "${RPC:-}" ]; then
   if [ -n "$slot" ] && is_addr "${MINT:-}"; then
     sup=$(curl -s -m 8 "$RPC" -H 'content-type: application/json' -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getTokenSupply\",\"params\":[\"$MINT\"]}")
     if [[ "$sup" == *uiAmountString* ]]; then pass "Token exists on-chain (supply $(echo "$sup" | grep -o '"uiAmountString":"[^"]*"' | cut -d'"' -f4))"
+    elif [ $POST = 1 ]; then fail "Token doesn't exist on-chain: is MINT the launched token?"
     else warn "Token doesn't exist on-chain yet (normal before launch)"; fi
+  fi
+  if [ -n "$slot" ] && is_addr "${PRIZE:-}"; then
+    lam=$(curl -s -m 8 "$RPC" -H 'content-type: application/json' -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getBalance\",\"params\":[\"$PRIZE\"]}" | grep -o '"value":[0-9]*' | cut -d: -f2)
+    if [ -n "$lam" ]; then
+      sol=$(awk "BEGIN{printf \"%.4f\", $lam/1e9}")
+      [ "$lam" -ge 20000000 ] && pass "Prize wallet has $sol SOL (covers claim/payout network fees)" || warn "Prize wallet has $sol SOL; send it ~0.05 SOL so it can pay network fees for claims"
+    fi
   fi
 fi
 
@@ -104,8 +114,29 @@ if [ "${state:-}" = "running" ] && [ -f "$KP" ]; then
   out=$(docker compose exec -T api node scripts/claim-fees.js 2>&1 | grep -v bigint | tail -8)
   echo "$out" | sed 's/^/        /'
   [[ "$out" == *"'error'"* ]] && warn "A fee source returned an error (see above)"
-  [[ "$out" == *"'skipped'"* ]] && warn "Prize wallet isn't the pool creator yet: run scripts/transfer-creator.js after launch"
+  if [[ "$out" == *"'skipped'"* ]]; then
+    [ $POST = 1 ] && fail "Prize wallet isn't the pool creator: run scripts/transfer-creator.js (or send the LP NFT)" || warn "Prize wallet isn't the pool creator yet: run scripts/transfer-creator.js after launch"
+  fi
+  [[ "$out" == *"'ready'"* || "$out" == *"'below minimum'"* ]] && pass "Fee claiming can see your pool"
+  [ $POST = 1 ] && [[ "$out" != *"'ready'"* && "$out" != *"'below minimum'"* && "$out" != *"'skipped'"* ]] && warn "No Meteora pool found for the claim key yet"
 else warn "Skipped (container or keypair missing)"; fi
+
+if [ $POST = 1 ]; then
+  section "Post-launch: live traffic"
+  stats=$(curl -s -m 8 http://127.0.0.1:8080/api/graph | python3 -c '
+import sys,json,time
+d=json.load(sys.stdin); s=d["stats"]
+print(len(d["nodes"])-2, s["vaccinated"], s.get("holders") or 0, int(time.time())-d["updatedAt"], len(d["feed"]))' 2>/dev/null)
+  if [ -n "$stats" ]; then
+    read -r hosts vac holders age feed <<<"$stats"
+    [ "$hosts" -gt 0 ] && pass "$hosts wallets infected, $vac vaccinated" || warn "No infections yet: has anyone bought? Check the transmission log"
+    [ "$holders" -gt 0 ] && pass "Balances reconciled: $holders holders" || warn "Holder count not reconciled yet (runs every 10 min)"
+    [ "$age" -lt 120 ] && pass "Snapshot fresh (${age}s old)" || warn "Snapshot is ${age}s old"
+  else fail "Couldn't read /api/graph"; fi
+  errs=$(docker compose logs --since 15m api 2>/dev/null | grep -ciE "error|429|failed")
+  [ "${errs:-0}" -eq 0 ] && pass "No errors in the last 15 minutes of logs" || warn "$errs error lines in the last 15 min: docker compose logs --since 15m api | grep -iE 'error|429|failed'"
+  docker compose logs --since 15m api 2>/dev/null | grep -q "429" && warn "Helius is rate-limiting (429): upgrade the plan"
+fi
 
 section "9. Housekeeping"
 free=$(df -Pm . | awk 'NR==2{print $4}'); [ "$free" -gt 2000 ] && pass "Disk free ${free} MB" || warn "Only ${free} MB disk free"
