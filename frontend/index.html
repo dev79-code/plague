@@ -6,6 +6,9 @@
 <title>$PLAGUE Outbreak Map</title>
 <meta name="description" content="Live map of every wallet infected by $PLAGUE on Solana, traced back to patient zero.">
 <meta name="theme-color" content="#070d10">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Stencil+Display:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -32,7 +35,7 @@ header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-
 .brand{display:flex;align-items:center;gap:14px}
 .brand h1{font-family:var(--display);font-weight:800;font-size:clamp(38px,5.4vw,60px);line-height:.85;letter-spacing:.03em;margin:0;color:var(--infect);text-shadow:0 0 24px rgba(255,68,102,.35)}
 .brand .sub{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-top:4px}
-.hazard{width:50px;height:50px;flex:none;filter:drop-shadow(0 0 10px rgba(255,68,102,.5));animation:spin 30s linear infinite}
+.hazard{width:50px;height:50px;flex:none;filter:drop-shadow(0 0 10px rgba(255,204,51,.35));animation:spin 30s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .hdr-right{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .live{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--infect);border:1px solid rgba(255,68,102,.4);padding:5px 10px;background:rgba(255,68,102,.06)}
@@ -181,12 +184,7 @@ ol.lb li:first-child .rk{color:var(--zero)}
 <div class="wrap">
   <header class="top">
     <div class="brand">
-      <svg class="hazard" viewBox="0 0 100 100" aria-hidden="true">
-        <g fill="none" stroke="#ff4466" stroke-width="7">
-          <circle cx="50" cy="31" r="18"/><circle cx="33.5" cy="59.5" r="18"/><circle cx="66.5" cy="59.5" r="18"/>
-        </g>
-        <circle cx="50" cy="50" r="9" fill="#070d10" stroke="#ff4466" stroke-width="5"/>
-      </svg>
+      <img class="hazard" src="/logo.png" width="50" height="50" alt="" aria-hidden="true">
       <div>
         <h1>$PLAGUE</h1>
         <div class="sub">Outbreak map · Solana · Meteora pool</div>
