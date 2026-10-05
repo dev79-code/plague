@@ -1,0 +1,689 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>$PLAGUE Outbreak Map</title>
+<meta name="description" content="Live map of every wallet infected by $PLAGUE on Solana, traced back to patient zero.">
+<meta name="theme-color" content="#070d10">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Stencil+Display:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+/* Layout: containment-lab monitor. Stat strip with epidemic curve, live contagion graph as the hero, inspector rail on the right, rulebook below. Single dark look by choice. */
+:root{
+  color-scheme: dark;
+  --bg:#070d10; --panel:#0c161a; --panel2:#112025; --line:#1a2b31; --line2:#243a41; --fg:#d9e6e8; --muted:#7a9196; --dim:#4b6066;
+  --infect:#ff4466; --vax:#3fd6c6; --zero:#ffb547; --pool:#a98bff;
+  --display:"Big Shoulders Stencil Display", "Impact", "Arial Narrow", sans-serif;
+  --body:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--fg)}
+body{font-family:var(--body);font-size:14px;line-height:1.5;padding-inline:16px;padding-block:14px 40px;
+  background-image:radial-gradient(ellipse 80% 50% at 50% -10%, rgba(255,68,102,.10), transparent 70%)}
+.wrap{max-width:1380px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--zero);outline-offset:2px}
+
+header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 24px;padding-bottom:4px}
+.brand{display:flex;align-items:center;gap:14px}
+.brand h1{font-family:var(--display);font-weight:800;font-size:clamp(38px,5.4vw,60px);line-height:.85;letter-spacing:.03em;margin:0;color:var(--infect);text-shadow:0 0 24px rgba(255,68,102,.35)}
+.brand .sub{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-top:4px}
+.hazard{width:50px;height:50px;flex:none;filter:drop-shadow(0 0 10px rgba(255,68,102,.5));animation:spin 30s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hdr-right{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.live{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--infect);border:1px solid rgba(255,68,102,.4);padding:5px 10px;background:rgba(255,68,102,.06)}
+.live i{width:7px;height:7px;border-radius:50%;background:var(--infect);box-shadow:0 0 8px var(--infect);animation:blink 1.2s infinite}
+.live.paused{color:var(--muted);border-color:var(--line2);background:transparent} .live.paused i{background:var(--muted);box-shadow:none;animation:none}
+.ca{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.ca b{color:var(--fg);font-weight:500}
+@keyframes blink{50%{opacity:.25}}
+
+.stats{display:grid;grid-template-columns:1.5fr repeat(5,minmax(0,1fr));border:1px solid var(--line);background:linear-gradient(180deg,var(--panel2),var(--panel))}
+.stat{padding:11px 14px;border-right:1px solid var(--line);min-width:0;position:relative}
+.stat:last-child{border-right:0}
+.stat .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.stat .v{font-family:var(--display);font-weight:600;font-size:32px;line-height:1.05;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat .v small{font-family:var(--mono);font-size:12px;color:var(--muted);margin-left:4px}
+.stat.curve{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:end}
+#spark{width:100%;height:44px;display:block}
+.c-inf{color:var(--infect)} .c-vax{color:var(--vax)} .c-zero{color:var(--zero)} .c-pool{color:var(--pool)}
+
+.main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px}
+.mapbox{position:relative;border:1px solid var(--line2);min-height:600px;overflow:hidden;
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(255,68,102,.07) 0%, transparent 60%),
+    linear-gradient(var(--line) 1px, transparent 1px) 0 0/40px 40px,
+    linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0/40px 40px,
+    #081013;
+}
+.mapbox::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center, transparent 55%, rgba(4,8,10,.85) 100%)}
+.corner{position:absolute;width:14px;height:14px;border-color:var(--infect);border-style:solid;opacity:.7;z-index:2;pointer-events:none}
+.corner.tl{top:6px;left:6px;border-width:2px 0 0 2px}.corner.tr{top:6px;right:6px;border-width:2px 2px 0 0}
+.corner.bl{bottom:6px;left:6px;border-width:0 0 2px 2px}.corner.br{bottom:6px;right:6px;border-width:0 2px 2px 0}
+#map{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;z-index:1}
+#map.hover{cursor:pointer}
+.maptools{position:absolute;top:14px;left:14px;right:14px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;pointer-events:none;z-index:3}
+.maptools>*{pointer-events:auto}
+.search{display:flex;background:rgba(12,22,26,.92);border:1px solid var(--line2);min-width:0;flex:1 1 220px;max-width:340px;backdrop-filter:blur(4px)}
+.search input{background:transparent;border:0;padding:7px 10px;font-family:var(--mono);font-size:12px;flex:1;min-width:0;outline:none}
+.search button{border:0;border-left:1px solid var(--line2)}
+.btn{background:rgba(12,22,26,.92);border:1px solid var(--line2);padding:7px 11px;font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;cursor:pointer;color:var(--fg);backdrop-filter:blur(4px)}
+.btn:hover{border-color:var(--muted)}
+.btn.on{color:var(--zero);border-color:rgba(255,181,71,.6)}
+.legend{position:absolute;left:14px;bottom:14px;display:flex;flex-wrap:wrap;gap:6px 14px;background:rgba(8,14,17,.88);border:1px solid var(--line2);padding:7px 10px;font-family:var(--mono);font-size:11px;color:var(--muted);max-width:calc(100% - 28px);z-index:3}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.note{position:absolute;right:14px;bottom:14px;font-family:var(--mono);font-size:10.5px;color:var(--muted);background:rgba(8,14,17,.88);border:1px solid var(--line2);padding:4px 8px;z-index:3}
+
+/* hover card */
+.tip{position:absolute;z-index:5;pointer-events:none;width:280px;max-width:calc(100% - 20px);background:rgba(9,17,20,.97);border:1px solid var(--line2);box-shadow:0 12px 40px rgba(0,0,0,.55);font-size:12.5px;opacity:0;transform:translateY(4px);transition:opacity .12s, transform .12s}
+.tip.show{opacity:1;transform:none}
+.tip .th{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.ava{width:30px;height:30px;flex:none;border-radius:50%}
+.tip .nm{font-weight:600;font-size:14px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tip .ad{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.tip .bd{padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.hold{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.hold b{font-family:var(--display);font-size:26px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+.hold span{font-family:var(--mono);font-size:11px;color:var(--muted);text-align:right}
+.sbar{height:4px;background:var(--line);position:relative}
+.sbar i{position:absolute;left:0;top:0;bottom:0}
+.tip dl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:0}
+.tip dt{color:var(--muted)} .tip dd{margin:0;text-align:right;font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums}
+.tip .hint{font-family:var(--mono);font-size:10.5px;color:var(--dim);letter-spacing:.06em;text-transform:uppercase;border-top:1px solid var(--line);padding:6px 12px}
+
+aside{display:flex;flex-direction:column;gap:14px;min-width:0}
+.panel{border:1px solid var(--line);background:var(--panel);min-width:0}
+.panel h2{margin:0;font-family:var(--mono);font-weight:500;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:9px 12px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;background:linear-gradient(180deg,var(--panel2),var(--panel))}
+.pbody{padding:12px}
+.idhead{display:flex;gap:10px;align-items:center}
+.idhead .ava{width:38px;height:38px}
+.idname{font-weight:600;font-size:15px;line-height:1.2}
+.addr{font-family:var(--mono);font-size:11.5px;word-break:break-all;color:var(--muted)}
+.pill{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:1px 6px;border:1px solid currentColor;line-height:1.5}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;margin-top:12px;font-size:13px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;min-width:0;overflow-wrap:anywhere}
+.link{background:none;border:0;padding:0;color:var(--zero);cursor:pointer;font-family:var(--mono);text-decoration:underline;text-underline-offset:2px}
+.chain{margin-top:12px;font-family:var(--mono);font-size:11.5px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;color:var(--muted)}
+.chain button{background:var(--panel2);border:1px solid var(--line);padding:1px 6px;cursor:pointer;font-family:var(--mono);font-size:11px}
+.empty{color:var(--muted);font-size:13px}
+
+ol.lb{list-style:none;margin:0;padding:0}
+ol.lb li{display:grid;grid-template-columns:22px 1fr auto;gap:2px 8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);cursor:pointer;font-variant-numeric:tabular-nums}
+ol.lb li:last-child{border-bottom:0}
+ol.lb li:hover{background:var(--panel2)}
+.rk{font-family:var(--display);font-size:20px;color:var(--dim);grid-row:span 2}
+ol.lb li:first-child .rk{color:var(--zero)}
+.lbaddr{font-size:12.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lbn{font-family:var(--mono);font-size:12px;color:var(--infect)}
+.bar{height:3px;background:var(--line);grid-column:2/4}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,rgba(255,68,102,.4),var(--infect))}
+
+.feed{max-height:240px;overflow-y:auto;font-family:var(--mono);font-size:11.5px}
+.feed div{padding:5px 12px;border-bottom:1px solid var(--line);color:var(--muted);cursor:pointer;line-height:1.45}
+.feed div:hover{background:var(--panel2)}
+.feed b{font-weight:500}
+.feed time{color:var(--dim);margin-right:6px}
+
+.lower{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:14px}
+.rules{padding:6px 16px 14px}
+.rules h3{font-family:var(--display);font-weight:600;font-size:22px;letter-spacing:.02em;margin:12px 0 4px;text-wrap:balance}
+.rules p{margin:0;color:#b6c6c9;max-width:65ch}
+.rules code{font-family:var(--mono);font-size:12.5px;color:var(--zero)}
+.prize .total{font-family:var(--display);font-weight:800;font-size:60px;line-height:1;color:var(--zero);font-variant-numeric:tabular-nums;text-shadow:0 0 30px rgba(255,181,71,.25)}
+.prize .total small{font-size:22px;margin-left:6px}
+.split{margin-top:14px;display:flex;flex-direction:column;gap:12px}
+.split .row{display:grid;grid-template-columns:1fr auto;gap:2px 12px}
+.split .row .nm{font-weight:600}
+.split .row .amt{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+.split .row .who{grid-column:1/3;font-size:12.5px;color:var(--muted)}
+.meter{height:6px;background:var(--line);display:flex;gap:2px}
+.epoch{margin-top:14px;font-family:var(--mono);font-size:11.5px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+
+@media (max-width:1100px){
+  .main{grid-template-columns:1fr}
+  .lower{grid-template-columns:1fr}
+  .stats{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .stat:nth-child(3){border-right:0}
+  .stat:nth-child(-n+3){border-bottom:1px solid var(--line)}
+}
+@media (max-width:560px){
+  .mapbox{min-height:460px}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stat{border-bottom:1px solid var(--line)}
+  .stat.curve{grid-column:1/3;border-right:0}
+  .stat:nth-child(3){border-right:0}
+  .stat:nth-child(4),.stat:nth-child(6){border-right:1px solid var(--line)}
+  .stat:nth-child(2),.stat:nth-child(5){border-right:1px solid var(--line)}
+  .stat .v{font-size:26px}
+  .stat:last-child{grid-column:1/3}
+  .note{display:none}
+}
+@media (prefers-reduced-motion:reduce){.live i,.hazard{animation:none}}
+</style>
+</head>
+<body>
+<style>
+[hidden]{display:none!important}
+.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:4;pointer-events:none;text-align:center;padding:24px}
+.overlay div{background:rgba(8,14,17,.9);border:1px solid var(--line2);padding:18px 22px;max-width:380px}
+.overlay b{display:block;font-family:var(--display);font-size:26px;font-weight:600;color:var(--infect);margin-bottom:4px}
+.overlay p{margin:0;color:var(--muted);font-size:13px}
+.live.err{color:var(--zero);border-color:rgba(255,181,71,.5);background:transparent}
+.live.err i{background:var(--zero);box-shadow:none}
+.ca button{background:none;border:0;padding:0;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--fg)}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <svg class="hazard" viewBox="0 0 100 100" aria-hidden="true">
+        <g fill="none" stroke="#ff4466" stroke-width="7">
+          <circle cx="50" cy="31" r="18"/><circle cx="33.5" cy="59.5" r="18"/><circle cx="66.5" cy="59.5" r="18"/>
+        </g>
+        <circle cx="50" cy="50" r="9" fill="#070d10" stroke="#ff4466" stroke-width="5"/>
+      </svg>
+      <div>
+        <h1>$PLAGUE</h1>
+        <div class="sub">Outbreak map · Solana · Meteora pool</div>
+      </div>
+    </div>
+    <div class="hdr-right">
+      <span class="ca">Mint <button id="mint" type="button" title="Copy mint address">—</button></span>
+      <div class="live" id="live"><i></i><span>Connecting</span></div>
+    </div>
+  </header>
+
+  <section class="stats" aria-label="Outbreak stats">
+    <div class="stat curve">
+      <div><div class="k">Infected wallets</div><div class="v c-inf" id="sInf">—</div></div>
+      <canvas id="spark" aria-label="Epidemic curve: infected wallets over the last 72 hours"></canvas>
+    </div>
+    <div class="stat"><div class="k">Vaccinated</div><div class="v c-vax" id="sVax">—</div></div>
+    <div class="stat"><div class="k">Spread rate (R)</div><div class="v" id="sR">—</div></div>
+    <div class="stat"><div class="k">Deepest strain</div><div class="v" id="sGen">—</div></div>
+    <div class="stat"><div class="k">Infected via pool</div><div class="v c-pool" id="sPool">—</div></div>
+    <div class="stat"><div class="k">Prize pool</div><div class="v c-zero" id="sPrize">—</div></div>
+  </section>
+
+  <section class="main">
+    <div class="mapbox" id="mapbox">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <canvas id="map" aria-label="Network map of infected wallets, each linked to the wallet that infected it. Hover a dot to see who holds it."></canvas>
+      <div class="maptools">
+        <form class="search" id="searchForm" role="search">
+          <input id="q" placeholder="Wallet address or .sol name…" autocomplete="off" spellcheck="false">
+          <button class="btn" type="submit">Trace</button>
+        </form>
+        <button class="btn" id="zeroBtn" type="button">Patient zero</button>
+        <button class="btn" id="fitBtn" type="button">Recenter</button>
+      </div>
+      <div class="overlay" id="overlay" hidden><div><b id="ovT">Connecting…</b><p id="ovP">Loading the outbreak.</p></div></div>
+      <div class="tip" id="tip" role="tooltip"></div>
+      <div class="legend">
+        <span><i class="dot" style="background:var(--zero);box-shadow:0 0 6px var(--zero)"></i>Patient zero</span>
+        <span><i class="dot" style="background:var(--pool);box-shadow:0 0 6px var(--pool)"></i>Meteora pool</span>
+        <span><i class="dot" style="background:var(--infect);box-shadow:0 0 6px var(--infect)"></i>Infected</span>
+        <span><i class="dot" style="background:var(--vax);box-shadow:0 0 6px var(--vax)"></i>Vaccinated</span>
+        <span>Dot size = holding</span>
+      </div>
+      <div class="note" id="note">Hover a dot · drag to pan · scroll to zoom</div>
+    </div>
+
+    <aside>
+      <div class="panel">
+        <h2><span>Wallet inspector</span><span id="insGen"></span></h2>
+        <div class="pbody" id="inspector"><p class="empty">Click any dot on the map, or search for a wallet.</p></div>
+      </div>
+      <div class="panel">
+        <h2><span>Super-spreaders</span><span>Epoch score</span></h2>
+        <ol class="lb" id="lb"><li style="cursor:default"><span></span><span class="empty">No scores yet this epoch</span></li></ol>
+      </div>
+      <div class="panel">
+        <h2><span>Transmission log</span><span id="feedCount"></span></h2>
+        <div class="feed" id="feed"></div>
+      </div>
+    </aside>
+  </section>
+
+  <section class="lower">
+    <div class="panel">
+      <h2><span>Rules of infection</span><span>Epoch <span id="epochId">—</span></span></h2>
+      <div class="rules">
+        <h3>Patient zero seeds the pool</h3>
+        <p>The dev wallet launches <code>$PLAGUE</code> and seeds the Meteora pool. Every infection on the map traces back to that one wallet.</p>
+        <h3>Two ways to catch it</h3>
+        <p>Buy on Meteora and the pool infects you. Receive at least <code class="r-min">1,000 $PLAGUE</code> from an infected wallet and that wallet becomes your infector. Your first infection is permanent, so your place in the lineage never changes.</p>
+        <h3>Spread it to score</h3>
+        <p>Your epoch score is every wallet downstream of you that was infected this epoch and still holds at least <code class="r-active">1,000 $PLAGUE</code>. Deep chains beat one big send.</p>
+        <h3>Take the vaccine</h3>
+        <p>Burn <code class="r-vax">25,000 $PLAGUE</code> in total to become vaccinated. You stop spreading, your score freezes, you can never be reinfected, and you get a share of the cure fund for the epoch.</p>
+      </div>
+    </div>
+
+    <div class="panel prize">
+      <h2><span>Prize pool · this epoch</span><span id="epochClock">—</span></h2>
+      <div class="pbody">
+        <div class="total" id="prizeTotal">—</div>
+        <div class="split">
+          <div class="meter" id="meter"></div>
+          <div class="row">
+            <span class="nm c-inf" id="pAn">Super-spreader</span><span class="amt" id="pA">—</span>
+            <span class="who" id="pAw">Wallet with the highest epoch score</span>
+          </div>
+          <div class="row">
+            <span class="nm c-zero" id="pBn">Deepest strain</span><span class="amt" id="pB">—</span>
+            <span class="who" id="pBw">First wallet to reach the deepest generation this epoch</span>
+          </div>
+          <div class="row">
+            <span class="nm c-vax" id="pCn">Cure fund</span><span class="amt" id="pC">—</span>
+            <span class="who" id="pCw">Split across vaccinated wallets by amount burned this epoch</span>
+          </div>
+        </div>
+        <div class="epoch">Funded by the creator share of Meteora trading fees and paid from the prize wallet when the epoch ends. The leaderboard resets each epoch; the map keeps growing.</div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+// Where the API lives. Leave '' on Vercel (vercel.json forwards /api to your droplet),
+// or open the page with ?api=http://localhost:8080 for local testing.
+window.PLAGUE_API = window.PLAGUE_API ?? '';
+</script>
+<script>
+(() => {
+const API = (new URLSearchParams(location.search).get('api') || window.PLAGUE_API || '').replace(/\/$/, '');
+const POLL_MS = 5000;
+const rnd = (a,b)=>a+Math.random()*(b-a);
+const pick = a=>a[Math.floor(Math.random()*a.length)];
+const fmt = n=>Math.round(n).toLocaleString("en-US");
+const compact = n=> n>=1e9? (n/1e9).toFixed(2)+"B" : n>=1e6? (n/1e6).toFixed(2)+"M" : n>=1e3? (n/1e3).toFixed(1)+"K" : fmt(n);
+const esc = s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const C = {inf:"#ff4466", vax:"#3fd6c6", zero:"#ffb547", pool:"#a98bff"};
+const $ = id=>document.getElementById(id);
+
+const short = n=> n.type==="pool" ? "Meteora pool" : n.addr.slice(0,4)+"…"+n.addr.slice(-4);
+const label = n=> n.type==="pool" ? "Meteora pool" : n.name || (n.type==="zero" ? "Patient zero" : short(n));
+function hue(addr){let h=0;for(const c of addr)h=(h*31+c.charCodeAt(0))>>>0;return h;}
+function avatar(n){
+  if(n.type==="pool") return `background:conic-gradient(from 0deg, #a98bff, #5ad1ff, #a98bff)`;
+  if(n.type==="zero") return `background:radial-gradient(circle at 35% 35%, #ffe2a8, #ffb547 55%, #a8641a)`;
+  const h=hue(n.addr), a=h%360, b=(h>>9)%360;
+  return `background:linear-gradient(135deg,hsl(${a} 70% 58%),hsl(${b} 65% 38%))`;
+}
+const colorOf = n => n.type==="zero"?C.zero : n.type==="pool"?C.pool : n.state==="vaccinated"?C.vax : C.inf;
+
+/* ---------- state ---------- */
+let snap=null, arr=[], nodes=[], links=[], byAddr=new Map(), selected=null, hovered=null, particles=[], firstLoad=true, lastOk=0;
+const canvas=$("map"), ctx=canvas.getContext("2d"), box=$("mapbox"), tip=$("tip");
+let W=0,H=0,dpr=1, transform=d3.zoomIdentity;
+
+const sim = d3.forceSimulation([])
+  .force("link", d3.forceLink([]).distance(l=> l.target.type==="pool"?70: 14 + Math.min(20,l.source.children*1.2)).strength(0.9))
+  .force("charge", d3.forceManyBody().strength(d=> d.type==="wallet" ? -24 : -300).distanceMax(340))
+  .force("collide", d3.forceCollide(d=>radius(d)+2))
+  .force("x", d3.forceX(0).strength(0.02)).force("y", d3.forceY(0).strength(0.02))
+  .alphaDecay(0.03);
+
+function radius(n){
+  if(n.type==="zero") return 11;
+  if(n.type==="pool") return 10;
+  return Math.max(2.4, Math.min(10, 1.2 + Math.log10(Math.max(n.bal,1))*0.95 - 2.2 + Math.sqrt(n.desc)*0.25));
+}
+
+/* ---------- data ---------- */
+async function poll(){
+  try{
+    const r = await fetch(API + "/api/graph", {cache:"no-store"});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    ingest(await r.json());
+    lastOk = Date.now();
+  }catch(e){
+    setLive("err", "Reconnecting");
+    if(!snap) overlay("Can't reach the outbreak server", API ? `Tried ${API}/api/graph. Check the API is running and CORS_ORIGINS includes this site.` : "Set the API address in vercel.json, or open this page with ?api=https://your-api-domain");
+  }finally{ setTimeout(poll, POLL_MS); }
+}
+
+const VIA = ["launch","liquidity","buy","transfer"];
+function ingest(s){
+  snap = s;
+  const now = performance.now();
+  arr = s.nodes.map((row, i)=>{
+    const [addr,pIdx,gen,vax,via,bal,t,burned,name,desc,score,kids] = row;
+    let n = byAddr.get(addr);
+    const isNew = !n;
+    if(isNew){
+      n = {addr, id:addr, born: firstLoad ? -1e9 : now};
+      byAddr.set(addr, n); nodes.push(n);
+    }
+    const wasVax = n.state==="vaccinated";
+    Object.assign(n, {type: i===0?"zero" : addr==="pool"?"pool":"wallet", pIdx, gen, state: vax?"vaccinated":"infected", via:VIA[via], bal, t, burned, name, desc, score, children:kids});
+    if(!wasVax && vax && !isNew) n.born = now;
+    return n;
+  });
+  for(const n of arr){
+    n.parent = n.pIdx>=0 ? arr[n.pIdx] : null;
+    if(n.x===undefined){
+      const p=n.parent;
+      n.x = (p && p.x!==undefined ? p.x : 0) + rnd(-8,8);
+      n.y = (p && p.y!==undefined ? p.y : 0) + rnd(-8,8);
+    }
+    if(n.parent && !n.link){
+      n.link = {source:n.parent, target:n};
+      links.push(n.link);
+      if(!firstLoad) particles.push({l:n.link, t:0, sp:0.02, big:true});
+    }
+  }
+  sim.nodes(nodes); sim.force("link").links(links);
+  if(firstLoad){
+    sim.alpha(1); for(let i=0;i<Math.min(300, 60000/Math.max(nodes.length,1));i++) sim.tick();
+    sim.alpha(0.05).restart();
+    resize(); fit(false);
+    firstLoad=false;
+    const lead = s.leaders.length ? arr[s.leaders[0]] : arr[0];
+    if(lead) select(lead);
+  } else {
+    sim.alpha(Math.max(sim.alpha(), 0.1)).restart();
+  }
+  setLive("ok");
+  if(arr.length<=2) overlay("Waiting for the first infection", "Patient zero has seeded the pool. The first Meteora buy starts the outbreak.");
+  else $("overlay").hidden = true;
+  renderAll();
+}
+
+function overlay(t,p){ $("ovT").textContent=t; $("ovP").textContent=p; $("overlay").hidden=false; }
+function setLive(kind, text){
+  const el=$("live");
+  el.classList.toggle("err", kind==="err");
+  if(kind==="ok") el.lastChild.textContent = "Live";
+  else el.lastChild.textContent = text;
+}
+
+/* ---------- glow sprites ---------- */
+const SPR={};
+function sprite(col){
+  if(SPR[col]) return SPR[col];
+  const S=128, c=document.createElement("canvas"); c.width=c.height=S; const g=c.getContext("2d");
+  let gr=g.createRadialGradient(S/2,S/2,0,S/2,S/2,S/2);
+  gr.addColorStop(0,col+"88"); gr.addColorStop(0.3,col+"33"); gr.addColorStop(1,col+"00");
+  g.fillStyle=gr; g.fillRect(0,0,S,S);
+  const r=S/2/3.2; gr=g.createRadialGradient(S/2-r*.35,S/2-r*.35,0,S/2,S/2,r);
+  gr.addColorStop(0,"#ffffff"); gr.addColorStop(0.25,col); gr.addColorStop(1,col);
+  g.fillStyle=gr; g.beginPath(); g.arc(S/2,S/2,r,0,Math.PI*2); g.fill();
+  return SPR[col]=c;
+}
+
+/* ---------- drawing ---------- */
+function resize(){ const r=box.getBoundingClientRect(); dpr=window.devicePixelRatio||1; W=r.width; H=r.height; canvas.width=W*dpr; canvas.height=H*dpr; }
+function ctrl(a,b){ const mx=(a.x+b.x)/2, my=(a.y+b.y)/2, dx=b.x-a.x, dy=b.y-a.y; return [mx-dy*0.14, my+dx*0.14]; }
+function curve(a,b){ const [cx,cy]=ctrl(a,b); ctx.moveTo(a.x,a.y); ctx.quadraticCurveTo(cx,cy,b.x,b.y); }
+function onCurve(a,b,t){ const [cx,cy]=ctrl(a,b),u=1-t; return [u*u*a.x+2*u*t*cx+t*t*b.x, u*u*a.y+2*u*t*cy+t*t*b.y]; }
+function pathSet(n){ const s=new Set(); for(let a=n;a;a=a.parent) s.add(a.addr); return s; }
+
+function draw(){
+  requestAnimationFrame(draw);
+  if(!arr.length) { ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W,H); return; }
+  const now=performance.now(), big = nodes.length>4000;
+  ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W,H);
+  ctx.translate(transform.x, transform.y); ctx.scale(transform.k, transform.k);
+  const k=transform.k, focusN=hovered||selected, onPath=focusN?pathSet(focusN):new Set();
+
+  ctx.lineWidth=0.9/k; ctx.strokeStyle="rgba(122,145,150,.22)"; ctx.beginPath();
+  for(const l of links) if(!onPath.has(l.target.addr) && l.source.type!=="pool") curve(l.source,l.target);
+  ctx.stroke();
+  ctx.strokeStyle="rgba(169,139,255,.16)"; ctx.beginPath();
+  for(const l of links) if(l.source.type==="pool" && !onPath.has(l.target.addr)) curve(l.source,l.target);
+  ctx.stroke();
+
+  if(focusN && focusN.desc>0 && focusN.type==="wallet"){
+    const kids=new Map(); for(const l of links){ if(!kids.has(l.source)) kids.set(l.source,[]); kids.get(l.source).push(l.target); }
+    ctx.strokeStyle="rgba(255,68,102,.6)"; ctx.lineWidth=1.2/k; ctx.beginPath();
+    const st=[focusN]; while(st.length){const a=st.pop(); for(const c of kids.get(a)||[]){curve(a,c);st.push(c);}}
+    ctx.stroke();
+  }
+  if(focusN){
+    ctx.save(); ctx.strokeStyle=C.zero; ctx.lineWidth=2.4/k; ctx.shadowColor=C.zero; ctx.shadowBlur=10;
+    ctx.setLineDash([6/k,4/k]); ctx.lineDashOffset=-now/40/k; ctx.beginPath();
+    for(let a=focusN;a.parent;a=a.parent) curve(a.parent,a);
+    ctx.stroke(); ctx.restore();
+  }
+  // ambient sparks flowing infector -> infected, weighted toward recent infections
+  if(particles.length<(big?25:70) && links.length && Math.random()<0.6){
+    const l = Math.random()<.5 ? links[links.length-1-Math.floor(Math.random()*Math.min(60,links.length))] : pick(links);
+    particles.push({l, t:0, sp:rnd(0.008,0.02)});
+  }
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i]; p.t+=p.sp;
+    if(p.t>=1){particles.splice(i,1);continue;}
+    const [x,y]=onCurve(p.l.source,p.l.target,p.t), s=(p.big?7:4)/Math.sqrt(k);
+    ctx.globalAlpha=Math.sin(p.t*Math.PI)*(p.big?1:.7);
+    ctx.drawImage(sprite(p.l.source.type==="pool"?C.pool:C.inf), x-s, y-s, s*2, s*2);
+  }
+  ctx.globalAlpha=1;
+  for(const n of nodes){
+    const r=radius(n), s=r*3.2;
+    ctx.globalAlpha=(focusN && n.type==="wallet" && !onPath.has(n.addr))?0.7:1;
+    ctx.drawImage(sprite(colorOf(n)), n.x-s, n.y-s, s*2, s*2);
+    const age=(now-n.born)/1000;
+    if(age<1.8){ ctx.globalAlpha=1-age/1.8; ctx.strokeStyle=colorOf(n); ctx.lineWidth=1.6/k; ctx.beginPath(); ctx.arc(n.x,n.y,r+age*20,0,Math.PI*2); ctx.stroke(); }
+  }
+  ctx.globalAlpha=1;
+  const z=arr[0], ph=(now/1600)%1;
+  ctx.strokeStyle=C.zero; ctx.globalAlpha=1-ph; ctx.lineWidth=1.5/k;
+  ctx.beginPath(); ctx.arc(z.x,z.y,radius(z)+ph*30,0,Math.PI*2); ctx.stroke(); ctx.globalAlpha=1;
+  ctx.font=`500 ${11/k}px "IBM Plex Mono", monospace`; ctx.textAlign="center";
+  for(const n of [arr[0], byAddr.get("pool")]){ if(!n) continue; ctx.fillStyle=colorOf(n); ctx.fillText(n.type==="zero"?"PATIENT ZERO":"METEORA POOL", n.x, n.y-radius(n)-8/k); }
+  if(k>1.6 && !big){
+    ctx.font=`${10/k}px "IBM Plex Mono", monospace`; ctx.fillStyle="rgba(217,230,232,.75)";
+    for(const n of nodes) if(n.type==="wallet" && (n.desc>=6 || (n.name && n.desc>=2))) ctx.fillText(label(n), n.x, n.y+radius(n)+12/k);
+  }
+  for(const [n,col] of [[selected,"#ffffff"],[hovered,C.zero]]){
+    if(!n || n.x===undefined) continue;
+    ctx.strokeStyle=col; ctx.lineWidth=2/k; ctx.beginPath(); ctx.arc(n.x,n.y,radius(n)+4/k,0,Math.PI*2); ctx.stroke();
+  }
+  if(hovered) placeTip();
+}
+
+/* ---------- hover card ---------- */
+function solValue(n){ return snap && snap.priceSol ? n.bal*snap.priceSol : null; }
+function tipHtml(n){
+  const st = n.type==="zero"?["Patient zero","c-zero"]: n.type==="pool"?["Liquidity pool","c-pool"]: n.state==="vaccinated"?["Vaccinated","c-vax"]:["Infected","c-inf"];
+  const supply = snap && snap.supply, pct = supply ? n.bal/supply*100 : null, sv = solValue(n);
+  const name = n.type==="pool" ? "Meteora pool" : n.name || (n.type==="zero"?"Patient zero":"Unnamed wallet");
+  return `
+  <div class="th"><span class="ava" style="${avatar(n)}"></span>
+    <div style="min-width:0;flex:1"><div class="nm">${esc(name)}</div><div class="ad">${n.type==="pool"?"Pool vaults":short(n)} · gen ${n.gen}</div></div>
+    <span class="pill ${st[1]}">${st[0]}</span></div>
+  <div class="bd">
+    <div class="hold"><b class="${st[1]}">${compact(n.bal)}</b><span>$PLAGUE held${sv!=null?`<br>≈ ${sv.toFixed(sv<1?3:2)} SOL`:""}</span></div>
+    ${pct!=null?`<div class="sbar"><i style="width:${Math.min(100, n.type==="wallet"? pct*100 : pct)}%;background:${colorOf(n)}"></i></div>`:""}
+    <dl>
+      ${pct!=null?`<dt>Share of supply</dt><dd>${pct<0.001?"<0.001":pct.toFixed(pct<1?3:1)}%</dd>`:""}
+      ${n.type==="wallet"?`<dt>${n.via==="buy"?"Bought on":"Infected by"}</dt><dd>${n.via==="buy"?'<span class="c-pool">Meteora</span>':esc(label(n.parent||{addr:"?",type:"wallet"}))}</dd>`:""}
+      ${n.type==="pool"?`<dt>Wallets infected</dt><dd class="c-pool">${fmt(n.children)}</dd>`:`<dt>Downstream</dt><dd class="c-inf">${fmt(n.desc)}</dd><dt>Epoch score</dt><dd>${fmt(n.score)}</dd>`}
+      ${n.burned?`<dt>Burned</dt><dd class="c-vax">${fmt(n.burned)}</dd>`:""}
+    </dl>
+  </div>
+  <div class="hint">Click to trace lineage</div>`;
+}
+function showTip(n){ tip.innerHTML=tipHtml(n); tip.classList.add("show"); }
+function hideTip(){ tip.classList.remove("show"); }
+function placeTip(){
+  const [sx,sy]=transform.apply([hovered.x,hovered.y]);
+  const tw=tip.offsetWidth, th=tip.offsetHeight, pad=10, off=radius(hovered)*transform.k+14;
+  let x=sx+off, y=sy-th/2;
+  if(x+tw>W-pad) x=sx-off-tw;
+  if(x<pad){ x=Math.max(pad, Math.min(W-tw-pad, sx-tw/2)); y=sy+off; }
+  y=Math.max(pad, Math.min(H-th-pad, y));
+  tip.style.left=x+"px"; tip.style.top=y+"px";
+}
+
+/* ---------- interaction ---------- */
+const zoom=d3.zoom().scaleExtent([0.05,8]).on("zoom", e=>{transform=e.transform});
+d3.select(canvas).call(zoom).on("dblclick.zoom",null);
+function fit(animate=true){
+  if(!nodes.length) return;
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  for(const n of nodes){x0=Math.min(x0,n.x);y0=Math.min(y0,n.y);x1=Math.max(x1,n.x);y1=Math.max(y1,n.y);}
+  const k=Math.min(2.4, 0.95*Math.min(W/(x1-x0+30), H/(y1-y0+110)));
+  const t=d3.zoomIdentity.translate(W/2-k*(x0+x1)/2, H/2+14-k*(y0+y1)/2).scale(k);
+  (animate? d3.select(canvas).transition().duration(600) : d3.select(canvas)).call(zoom.transform, t);
+}
+function focus(n){
+  const k=Math.max(transform.k,1.6);
+  d3.select(canvas).transition().duration(600).call(zoom.transform, d3.zoomIdentity.translate(W/2-k*n.x,H/2-k*n.y).scale(k));
+}
+function hit(ev){
+  if(!nodes.length) return null;
+  const [px,py]=d3.pointer(ev,canvas), [x,y]=transform.invert([px,py]);
+  const n=sim.find(x,y,Infinity); if(!n) return null;
+  return Math.hypot(n.x-x,n.y-y)*transform.k <= Math.max(10, radius(n)*transform.k+6) ? n : null;
+}
+let touch=false;
+canvas.addEventListener("pointerdown", e=>{ touch = e.pointerType==="touch"; });
+canvas.addEventListener("click", ev=>{ const n=hit(ev); if(n){ select(n); hovered=n; showTip(n); } else if(touch){ hovered=null; hideTip(); } });
+canvas.addEventListener("pointermove", ev=>{
+  if(ev.buttons){ hovered=null; hideTip(); return; }
+  const n=hit(ev); canvas.classList.toggle("hover", !!n);
+  if(n!==hovered){ hovered=n; n?showTip(n):hideTip(); }
+});
+canvas.addEventListener("pointerleave", ()=>{ if(touch) return; hovered=null; hideTip(); canvas.classList.remove("hover"); });
+
+function select(n){ selected=n; renderInspector(); }
+
+$("searchForm").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const q=$("q").value.trim(), ql=q.toLowerCase();
+  if(!q) return;
+  const n = byAddr.get(q) || nodes.find(x=>(x.name && x.name.toLowerCase()===ql) || (ql.length>=4 && x.addr.toLowerCase().startsWith(ql)));
+  if(n){ select(n); focus(n); return; }
+  selected=null; $("insGen").textContent="";
+  const ins=$("inspector");
+  ins.innerHTML=`<div class="addr" style="color:var(--fg)">${esc(q)}</div><p class="empty" style="margin:10px 0 0">Checking…</p>`;
+  let msg = `Clean. This wallet has never been infected. Buy on Meteora, or ask an infected wallet to send you at least ${fmt(snap?.rules?.minInfect ?? 1000)} $PLAGUE.`;
+  try{
+    const r = await fetch(`${API}/api/wallet/${encodeURIComponent(q)}`);
+    const w = await r.json();
+    if(!r.ok) msg = w.error || "That address could not be checked.";
+    else if(w.status==="holder") msg = `Holds ${fmt(w.balance)} $PLAGUE but is not infected: it got its tokens from a wallet that wasn't spreading, or less than ${fmt(snap?.rules?.minInfect ?? 1000)} at once.`;
+  }catch{ /* keep the default message */ }
+  ins.innerHTML=`<div class="addr" style="color:var(--fg)">${esc(q)}</div><p class="empty" style="margin:10px 0 0">${esc(msg)}</p>`;
+});
+$("zeroBtn").onclick=()=>{ if(arr[0]){ select(arr[0]); focus(arr[0]); } };
+$("fitBtn").onclick=()=>fit(true);
+$("mint").onclick=async()=>{ if(!snap) return; try{ await navigator.clipboard.writeText(snap.mint); $("mint").textContent="Copied"; setTimeout(()=>$("mint").textContent=snap.mint.slice(0,4)+"…"+snap.mint.slice(-4),1200);}catch{} };
+
+/* ---------- panels ---------- */
+function ago(t){ const s=Math.max(0, Date.now()/1000 - t); if(s<60) return Math.round(s)+"s"; if(s<3600) return Math.round(s/60)+"m"; if(s<86400) return (s/3600).toFixed(1)+"h"; return Math.round(s/86400)+"d"; }
+const clock = t=>new Date(t*1000).toTimeString().slice(0,5);
+function renderInspector(){
+  const n=selected, ins=$("inspector");
+  if(!n){ ins.innerHTML='<p class="empty">Click any dot on the map, or search for a wallet.</p>'; return; }
+  $("insGen").textContent="Gen "+n.gen;
+  const color = n.type==="zero"?"c-zero":n.type==="pool"?"c-pool":n.state==="vaccinated"?"c-vax":"c-inf";
+  const st = n.type==="zero"?"Patient zero":n.type==="pool"?"Meteora pool":n.state==="vaccinated"?"Vaccinated":"Infected";
+  const how = n.type==="zero"?"Launched the token": n.type==="pool"?"Seeded by patient zero": n.via==="buy"?"Bought on Meteora":"Received from an infected wallet";
+  const chain=[]; for(let a=n.parent;a;a=a.parent) chain.push(a);
+  const chainHtml = chain.slice(0,8).map(a=>`<button data-a="${esc(a.addr)}" type="button" class="${a.type==='zero'?'c-zero':a.type==='pool'?'c-pool':''}">${esc(label(a))}</button>`).join("<span>←</span>") + (chain.length>8?`<span>← ${chain.length-8} more</span>`:"");
+  const sv = solValue(n);
+  ins.innerHTML = `
+    <div class="idhead"><span class="ava" style="${avatar(n)}"></span>
+      <div style="min-width:0;flex:1"><div class="idname">${esc(n.type==="pool"?"Meteora pool":n.name||(n.type==="zero"?"Patient zero":"Unnamed wallet"))}</div>
+      <span class="pill ${color}">${st}</span> <span class="empty" style="font-size:12px">${n.type==="wallet"?"infected "+ago(n.t)+" ago":""}</span></div></div>
+    <div class="addr" style="margin-top:10px">${n.type==="pool"?"All pool vaults":esc(n.addr)}</div>
+    <dl class="kv">
+      <dt>Holding</dt><dd class="${color}">${fmt(n.bal)} $PLAGUE</dd>
+      ${sv!=null?`<dt>Value</dt><dd>≈ ${sv.toFixed(2)} SOL</dd>`:""}
+      <dt>How</dt><dd>${how}</dd>
+      ${n.parent?`<dt>Infected by</dt><dd><button class="link" data-a="${esc(n.parent.addr)}" type="button">${esc(label(n.parent))}</button></dd>`:""}
+      <dt>Direct infections</dt><dd>${fmt(n.children)}</dd>
+      <dt>Total downstream</dt><dd class="c-inf">${fmt(n.desc)}</dd>
+      ${n.type==="wallet"?`<dt>Epoch score${n.state==="vaccinated"?" (frozen)":""}</dt><dd>${fmt(n.score)}</dd>`:""}
+      ${n.burned?`<dt>Burned</dt><dd class="c-vax">${fmt(n.burned)}</dd>`:""}
+    </dl>
+    ${chain.length?`<div class="chain"><span>Trace:</span>${chainHtml}</div>`:""}
+    ${n.type!=="pool"?`<p style="margin:12px 0 0"><a class="link" href="https://solscan.io/account/${esc(n.addr)}" target="_blank" rel="noopener">View on Solscan ↗</a></p>`:""}`;
+  ins.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>{ const t=byAddr.get(b.dataset.a); if(t){ select(t); focus(t); } });
+}
+
+const spark=$("spark"), sctx=spark.getContext("2d");
+function drawSpark(){
+  const r=spark.getBoundingClientRect(), d=window.devicePixelRatio||1;
+  if(!r.width || !snap) return;
+  spark.width=r.width*d; spark.height=r.height*d; sctx.setTransform(d,0,0,d,0,0);
+  const w=r.width, h=r.height, data=snap.curve||[], max=Math.max(...data,1);
+  if(data.length<2) return;
+  const X=i=>i/(data.length-1)*(w-4)+2, Y=v=>h-3-(v/max)*(h-8);
+  const gr=sctx.createLinearGradient(0,0,0,h); gr.addColorStop(0,"rgba(255,68,102,.35)"); gr.addColorStop(1,"rgba(255,68,102,0)");
+  sctx.beginPath(); data.forEach((v,i)=>i?sctx.lineTo(X(i),Y(v)):sctx.moveTo(X(i),Y(v)));
+  sctx.lineTo(X(data.length-1),h); sctx.lineTo(X(0),h); sctx.closePath(); sctx.fillStyle=gr; sctx.fill();
+  sctx.beginPath(); data.forEach((v,i)=>i?sctx.lineTo(X(i),Y(v)):sctx.moveTo(X(i),Y(v)));
+  sctx.strokeStyle="#ff4466"; sctx.lineWidth=1.5; sctx.stroke();
+  sctx.fillStyle="#ff4466"; sctx.beginPath(); sctx.arc(X(data.length-1),Y(data[data.length-1]),2.8,0,Math.PI*2); sctx.fill();
+}
+
+function renderAll(){
+  const s=snap, st=s.stats, sp=s.prize.split;
+  $("mint").textContent = s.mint.slice(0,4)+"…"+s.mint.slice(-4);
+  $("sInf").textContent=fmt(st.infected);
+  $("sVax").textContent=fmt(st.vaccinated);
+  $("sR").textContent=st.R.toFixed(2);
+  $("sGen").innerHTML=st.deepestGen+"<small>gen</small>";
+  $("sPool").textContent=st.poolPct+"%";
+  $("sPrize").innerHTML=s.prize.sol.toFixed(2)+"<small>SOL</small>";
+  $("prizeTotal").innerHTML=s.prize.pot.toFixed(2)+"<small>SOL</small>";
+  $("epochId").textContent = s.epoch.id;
+  document.querySelectorAll(".r-min").forEach(e=>e.textContent=fmt(s.rules.minInfect)+" $PLAGUE");
+  document.querySelectorAll(".r-active").forEach(e=>e.textContent=fmt(s.rules.minActiveHold)+" $PLAGUE");
+  document.querySelectorAll(".r-vax").forEach(e=>e.textContent=fmt(s.rules.vaxBurn)+" $PLAGUE");
+  $("meter").innerHTML = `<i style="width:${sp.spreader*100}%;background:var(--infect)"></i><i style="width:${sp.deepest*100}%;background:var(--zero)"></i><i style="width:${sp.cure*100}%;background:var(--vax)"></i>`;
+  $("pAn").textContent=`Super-spreader · ${Math.round(sp.spreader*100)}%`;
+  $("pBn").textContent=`Deepest strain · ${Math.round(sp.deepest*100)}%`;
+  $("pCn").textContent=`Cure fund · ${Math.round(sp.cure*100)}%`;
+  $("pA").textContent=(s.prize.pot*sp.spreader).toFixed(2)+" SOL";
+  $("pB").textContent=(s.prize.pot*sp.deepest).toFixed(2)+" SOL";
+  $("pC").textContent=(s.prize.pot*sp.cure).toFixed(2)+" SOL";
+  const L=s.leaders.map(i=>arr[i]).filter(Boolean);
+  $("pAw").textContent = L[0] ? `Leading: ${label(L[0])} with a score of ${fmt(L[0].score)}` : "No scores yet this epoch";
+  const dp = s.deepest>=0 ? arr[s.deepest] : null;
+  $("pBw").textContent = dp ? `Leading: ${label(dp)} at generation ${dp.gen}` : "No infections yet this epoch";
+  $("pCw").textContent = s.prize.cureWallets ? `${s.prize.cureWallets} vaccinated wallets have burned ${fmt(s.prize.cureBurned)} $PLAGUE this epoch` : "No one has taken the vaccine this epoch";
+  const max=Math.max(1, L[0]?L[0].score:1);
+  $("lb").innerHTML = L.length ? L.slice(0,6).map((n,i)=>`<li data-a="${esc(n.addr)}"><span class="rk">${i+1}</span><span class="lbaddr ${n.state==='vaccinated'?'c-vax':''}">${esc(label(n))}${n.state==='vaccinated'?' · vaccinated':''}</span><span class="lbn">${fmt(n.score)}</span><span class="bar"><i style="width:${n.score/max*100}%"></i></span></li>`).join("")
+    : `<li style="cursor:default"><span></span><span class="empty">No scores yet this epoch</span></li>`;
+  $("lb").querySelectorAll("[data-a]").forEach(li=>li.onclick=()=>{ const n=byAddr.get(li.dataset.a); select(n); focus(n); });
+  $("feedCount").textContent = fmt(Math.max(0, arr.length-2))+" wallets";
+  $("feed").innerHTML = s.feed.length ? s.feed.map(e=>{
+    const a=arr[e.a], b=arr[e.b], t=`<time>${clock(e.t)}</time>`;
+    if(e.k==="vax" && a) return `<div data-a="${esc(a.addr)}">${t}<b class="c-vax">${esc(label(a))}</b> burned ${compact(e.n)} and got vaccinated</div>`;
+    if(e.k==="buy" && b) return `<div data-a="${esc(b.addr)}">${t}<b class="c-inf">${esc(label(b))}</b> bought ${compact(e.n)} on <b class="c-pool">Meteora</b> · gen ${b.gen}</div>`;
+    if(a && b) return `<div data-a="${esc(b.addr)}">${t}<b class="${a.type==='zero'?'c-zero':'c-inf'}">${esc(label(a))}</b> infected <b class="c-inf">${esc(label(b))}</b> with ${compact(e.n)} · gen ${b.gen}</div>`;
+    return "";
+  }).join("") : `<div style="cursor:default">No transmissions yet.</div>`;
+  $("feed").querySelectorAll("[data-a]").forEach(d=>d.onclick=()=>{ const n=byAddr.get(d.dataset.a); if(n){ select(n); focus(n); } });
+  if(selected) renderInspector();
+  if(hovered) showTip(hovered);
+  drawSpark();
+}
+
+setInterval(()=>{
+  if(snap){
+    let s=Math.max(0, Math.floor(snap.epoch.end - Date.now()/1000));
+    const h=String(Math.floor(s/3600)).padStart(2,"0"), m=String(Math.floor(s%3600/60)).padStart(2,"0"), x=String(s%60).padStart(2,"0");
+    $("epochClock").textContent=`Ends in ${h}:${m}:${x}`;
+  }
+  if(lastOk && Date.now()-lastOk > POLL_MS*3) setLive("err","Reconnecting");
+}, 1000);
+
+new ResizeObserver(()=>{ resize(); drawSpark(); }).observe(box);
+resize(); overlay("Connecting…", "Loading the outbreak."); requestAnimationFrame(draw); poll();
+})();
+</script>
+
+</body>
+</html>

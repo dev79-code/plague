@@ -1,0 +1,25 @@
+{
+  "name": "plague-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Indexer + API for the $PLAGUE outbreak map",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node scripts/test.js",
+    "demo": "node scripts/demo.js",
+    "payout": "node scripts/payout.js"
+  },
+  "dependencies": {
+    "@bonfida/spl-name-service": "^3.0.0",
+    "@solana/web3.js": "^1.98.0",
+    "better-sqlite3": "^11.7.0",
+    "compression": "^1.7.5",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  }
+}
