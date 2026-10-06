@@ -17,7 +17,7 @@
 <meta name="twitter:image" content="https://plague.run/assets/og-image.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Stencil+Display:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <!--PLAGUE:HEAD-END-->
 <style>
@@ -26,10 +26,10 @@
 :root{
   color-scheme: dark;
   --bg:#090806; --panel:#100f0b; --panel2:#17150f; --line:#25211a; --line2:#353024;
-  --fg:#efe9d8; --muted:#9a917a; --dim:#5f584a;
+  --fg:#f3eee0; --muted:#b0a68c; --dim:#7a715f;
   --gold:#eec036; --gold-hi:#ffe27a; --gold-deep:#b98512;
   --vax:#3fd6c6; --pool:#a98bff; --zero:#fff3c4;
-  --display:"Big Shoulders Stencil Display", "Impact", "Arial Narrow", sans-serif;
+  --display:"Big Shoulders Display", "Oswald", "Impact", "Arial Narrow", sans-serif;
   --body:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
@@ -53,7 +53,7 @@ button,input{font:inherit;color:inherit}
 @keyframes lspin{to{rotate:360deg}}
 @keyframes lbeat{0%,100%{scale:1}12%{scale:1.07}24%{scale:.98}36%{scale:1.04}}
 @keyframes lring{0%{transform:scale(.6);opacity:.9}100%{transform:scale(2.1);opacity:0}}
-.lword{position:relative;font-family:var(--display);font-weight:800;font-size:clamp(40px,8vw,72px);letter-spacing:.06em;line-height:.9;
+.lword{position:relative;font-family:var(--display);font-weight:800;font-size:clamp(40px,8vw,72px);letter-spacing:.04em;line-height:.9;
   background:linear-gradient(100deg,var(--gold-deep) 0%,var(--gold) 35%,var(--gold-hi) 50%,var(--gold) 65%,var(--gold-deep) 100%);background-size:250% 100%;
   -webkit-background-clip:text;background-clip:text;color:transparent;animation:shimmer 2.6s linear infinite}
 @keyframes shimmer{from{background-position:120% 0}to{background-position:-130% 0}}
@@ -67,10 +67,17 @@ button,input{font:inherit;color:inherit}
 header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 24px;padding-bottom:4px}
 .brand{display:flex;align-items:center;gap:14px}
 .brand img{width:58px;height:58px;flex:none;filter:drop-shadow(0 0 12px rgba(238,192,54,.45));animation:lspin 40s linear infinite}
-.brand h1{font-family:var(--display);font-weight:800;font-size:clamp(40px,5.6vw,62px);line-height:.85;letter-spacing:.04em;margin:0;
+.brand h1{font-family:var(--display);font-weight:800;font-size:clamp(40px,5.6vw,62px);line-height:.85;letter-spacing:.025em;margin:0;padding-top:.12em;
   background:linear-gradient(100deg,var(--gold-deep) 0%,var(--gold) 35%,var(--gold-hi) 50%,var(--gold) 65%,var(--gold-deep) 100%);background-size:250% 100%;
   -webkit-background-clip:text;background-clip:text;color:transparent;animation:shimmer 6s linear infinite}
-.brand .sub{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-top:4px}
+/* The display face's "$" is barely different from its S, so the dollar is built from the S plus
+   a bar that pokes out above and below. */
+.cash{position:relative;-webkit-text-fill-color:#e9bb32;margin-right:.05em}
+.cash::before{content:"";position:absolute;left:50%;transform:translateX(-50%);width:.08em;top:-.1em;bottom:-.02em;
+  background:linear-gradient(180deg,var(--gold-hi),var(--gold-deep));
+  -webkit-mask:linear-gradient(#000 0 0) top/100% 26% no-repeat,linear-gradient(#000 0 0) bottom/100% 24% no-repeat;
+          mask:linear-gradient(#000 0 0) top/100% 26% no-repeat,linear-gradient(#000 0 0) bottom/100% 24% no-repeat}
+.brand .sub{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-top:12px}
 .hdr-right{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .live{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);border:1px solid rgba(238,192,54,.45);padding:5px 10px;background:rgba(238,192,54,.07)}
 .live i{width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px var(--gold);animation:blink 1.2s infinite}
@@ -84,8 +91,8 @@ header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-
 .stats{display:grid;grid-template-columns:1.5fr repeat(5,minmax(0,1fr));border:1px solid var(--line);background:linear-gradient(180deg,var(--panel2),var(--panel))}
 .stat{padding:11px 14px;border-right:1px solid var(--line);min-width:0}
 .stat:last-child{border-right:0}
-.stat .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
-.stat .v{font-family:var(--display);font-weight:600;font-size:32px;line-height:1.05;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat .k{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.stat .v{font-family:var(--display);font-weight:800;font-size:34px;letter-spacing:.02em;line-height:1.05;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .stat .v small{font-family:var(--mono);font-size:12px;color:var(--muted);margin-left:4px}
 .stat.curve{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:end}
 #spark{width:100%;height:44px;display:block}
@@ -118,13 +125,13 @@ header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-
 .replaying{position:absolute;left:50%;bottom:52px;translate:-50% 0;z-index:4;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);background:rgba(9,8,6,.85);border:1px solid rgba(238,192,54,.4);padding:5px 12px;display:flex;gap:10px;align-items:center}
 .replaying button{background:none;border:0;color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:0}
 .replaying button:hover{color:var(--fg)}
-.legend{position:absolute;left:14px;bottom:14px;display:flex;flex-wrap:wrap;gap:6px 14px;background:rgba(9,8,6,.88);border:1px solid var(--line2);padding:7px 10px;font-family:var(--mono);font-size:11px;color:var(--muted);max-width:calc(100% - 28px);z-index:4}
+.legend{position:absolute;left:14px;bottom:14px;display:flex;flex-wrap:wrap;gap:6px 14px;background:rgba(9,8,6,.88);border:1px solid var(--line2);padding:7px 10px;font-family:var(--mono);font-size:11.5px;color:var(--muted);max-width:calc(100% - 28px);z-index:4}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
 .note{position:absolute;right:14px;bottom:14px;font-family:var(--mono);font-size:10.5px;color:var(--muted);background:rgba(9,8,6,.88);border:1px solid var(--line2);padding:4px 8px;z-index:4}
 .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:5;pointer-events:none;text-align:center;padding:24px}
 .overlay div{background:rgba(9,8,6,.92);border:1px solid var(--line2);padding:18px 22px;max-width:380px}
-.overlay b{display:block;font-family:var(--display);font-size:26px;font-weight:600;color:var(--gold);margin-bottom:4px}
+.overlay b{display:block;font-family:var(--display);font-size:28px;font-weight:700;color:var(--gold);margin-bottom:4px}
 .overlay p{margin:0;color:var(--muted);font-size:13px}
 
 .tip{position:absolute;z-index:6;pointer-events:none;width:280px;max-width:calc(100% - 20px);background:rgba(12,11,8,.97);border:1px solid var(--line2);box-shadow:0 12px 40px rgba(0,0,0,.6);font-size:12.5px;opacity:0;transform:translateY(4px);transition:opacity .12s, transform .12s}
@@ -135,7 +142,7 @@ header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-
 .tip .ad{font-family:var(--mono);font-size:11px;color:var(--muted)}
 .tip .bd{padding:10px 12px;display:flex;flex-direction:column;gap:8px}
 .hold{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
-.hold b{font-family:var(--display);font-size:26px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+.hold b{font-family:var(--display);font-size:28px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
 .hold span{font-family:var(--mono);font-size:11px;color:var(--muted);text-align:right}
 .sbar{height:4px;background:var(--line);position:relative}
 .sbar i{position:absolute;left:0;top:0;bottom:0}
@@ -145,7 +152,7 @@ header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-
 
 aside{display:flex;flex-direction:column;gap:14px;min-width:0}
 .panel{border:1px solid var(--line);background:var(--panel);min-width:0}
-.panel h2{margin:0;font-family:var(--mono);font-weight:500;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:9px 12px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;background:linear-gradient(180deg,var(--panel2),var(--panel))}
+.panel h2{margin:0;font-family:var(--mono);font-weight:500;font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:9px 12px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;background:linear-gradient(180deg,var(--panel2),var(--panel))}
 .pbody{padding:12px}
 .idhead{display:flex;gap:10px;align-items:center}
 .idhead .ava{width:38px;height:38px}
@@ -163,14 +170,14 @@ ol.lb{list-style:none;margin:0;padding:0}
 ol.lb li{display:grid;grid-template-columns:22px 1fr auto;gap:2px 8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);cursor:pointer;font-variant-numeric:tabular-nums}
 ol.lb li:last-child{border-bottom:0}
 ol.lb li:hover{background:var(--panel2)}
-.rk{font-family:var(--display);font-size:20px;color:var(--dim);grid-row:span 2}
+.rk{font-family:var(--display);font-weight:700;font-size:21px;color:var(--dim);grid-row:span 2}
 ol.lb li:first-child .rk{color:var(--gold)}
 .lbaddr{font-size:12.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lbn{font-family:var(--mono);font-size:12px;color:var(--gold)}
 .bar{height:3px;background:var(--line);grid-column:2/4}
 .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold-deep),var(--gold-hi))}
 
-.feed{max-height:240px;overflow-y:auto;font-family:var(--mono);font-size:11.5px}
+.feed{max-height:240px;overflow-y:auto;font-family:var(--mono);font-size:12px}
 .feed div{padding:5px 12px;border-bottom:1px solid var(--line);color:var(--muted);cursor:pointer;line-height:1.45}
 .feed div:hover{background:var(--panel2)}
 .feed div.new{animation:flash 1.4s ease-out}
@@ -180,8 +187,8 @@ ol.lb li:first-child .rk{color:var(--gold)}
 
 .lower{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:14px}
 .rules{padding:6px 16px 14px}
-.rules h3{font-family:var(--display);font-weight:600;font-size:22px;letter-spacing:.02em;margin:12px 0 4px;text-wrap:balance;color:var(--fg)}
-.rules p{margin:0;color:#c7bfa9;max-width:65ch}
+.rules h3{font-family:var(--display);font-weight:700;font-size:24px;letter-spacing:.01em;margin:12px 0 4px;text-wrap:balance;color:var(--fg)}
+.rules p{margin:0;color:#d6cfba;max-width:65ch}
 .rules code{font-family:var(--mono);font-size:12.5px;color:var(--gold)}
 .prize .total{font-family:var(--display);font-weight:800;font-size:60px;line-height:1;color:var(--gold);font-variant-numeric:tabular-nums;text-shadow:0 0 30px rgba(238,192,54,.3)}
 .prize .total small{font-size:22px;margin-left:6px}
@@ -220,7 +227,7 @@ ol.lb li:first-child .rk{color:var(--gold)}
 <div id="loader" role="status" aria-live="polite">
   <canvas id="spores" aria-hidden="true"></canvas>
   <div class="lcore"><i></i><i></i><i></i><img src="assets/logo-256.png" alt=""></div>
-  <div class="lword">$PLAGUE</div>
+  <div class="lword" aria-label="$PLAGUE"><span class="cash" aria-hidden="true">S</span>PLAGUE</div>
   <div class="lstat"><div class="txt" id="ltxt">Isolating strain</div><div class="lbar"><b id="lbar"></b></div><div class="sub" id="lsub">Containment level 4</div></div>
 </div>
 
@@ -229,7 +236,7 @@ ol.lb li:first-child .rk{color:var(--gold)}
     <div class="brand">
       <img src="assets/logo-256.png" alt="$PLAGUE logo">
       <div>
-        <h1>$PLAGUE</h1>
+        <h1 aria-label="$PLAGUE"><span class="cash" aria-hidden="true">S</span>PLAGUE</h1>
         <div class="sub">Outbreak map · Solana · Meteora pool</div>
       </div>
     </div>
